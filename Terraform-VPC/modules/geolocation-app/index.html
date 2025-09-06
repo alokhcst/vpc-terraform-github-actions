@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geolocation App</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1><i class="fas fa-map-marker-alt"></i> Geolocation App</h1>
+            <p>Discover location information based on IP addresses</p>
+        </header>
+
+        <main class="main">
+            <div class="input-section">
+                <div class="input-group">
+                    <input type="text" id="ipInput" placeholder="Enter IP address (leave empty for your IP)" class="ip-input">
+                    <button id="lookupBtn" class="lookup-btn">
+                        <i class="fas fa-search"></i> Lookup
+                    </button>
+                </div>
+                <button id="myLocationBtn" class="my-location-btn">
+                    <i class="fas fa-crosshairs"></i> Use My IP
+                </button>
+            </div>
+
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Looking up location...</p>
+            </div>
+
+            <div id="error" class="error-container hidden">
+                <i class="fas fa-exclamation-triangle"></i>
+                <div class="error-content">
+                    <h3>Error</h3>
+                    <p id="errorMessage"></p>
+                </div>
+            </div>
+
+            <div id="results" class="results-container hidden">
+                <div class="result-header">
+                    <h2><i class="fas fa-globe"></i> Location Information</h2>
+                    <div class="ip-display">
+                        <span class="label">IP Address:</span>
+                        <span id="displayIp" class="value"></span>
+                    </div>
+                </div>
+
+                <div class="location-grid">
+                    <div class="location-card">
+                        <div class="card-header">
+                            <i class="fas fa-flag"></i>
+                            <h3>Country</h3>
+                        </div>
+                        <div class="card-content">
+                            <p id="country" class="primary-info">-</p>
+                            <p id="countryCode" class="secondary-info">-</p>
+                        </div>
+                    </div>
+
+                    <div class="location-card">
+                        <div class="card-header">
+                            <i class="fas fa-map"></i>
+                            <h3>Region</h3>
+                        </div>
+                        <div class="card-content">
+                            <p id="region" class="primary-info">-</p>
+                            <p id="regionCode" class="secondary-info">-</p>
+                        </div>
+                    </div>
+
+                    <div class="location-card">
+                        <div class="card-header">
+                            <i class="fas fa-city"></i>
+                            <h3>City</h3>
+                        </div>
+                        <div class="card-content">
+                            <p id="city" class="primary-info">-</p>
+                            <p id="zipCode" class="secondary-info">ZIP: <span>-</span></p>
+                        </div>
+                    </div>
+
+                    <div class="location-card">
+                        <div class="card-header">
+                            <i class="fas fa-map-pin"></i>
+                            <h3>Coordinates</h3>
+                        </div>
+                        <div class="card-content">
+                            <p id="coordinates" class="primary-info">-</p>
+                            <button id="mapBtn" class="map-btn">
+                                <i class="fas fa-external-link-alt"></i> View on Map
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="location-card">
+                        <div class="card-header">
+                            <i class="fas fa-clock"></i>
+                            <h3>Timezone</h3>
+                        </div>
+                        <div class="card-content">
+                            <p id="timezone" class="primary-info">-</p>
+                            <p id="currentTime" class="secondary-info">-</p>
+                        </div>
+                    </div>
+
+                    <div class="location-card">
+                        <div class="card-header">
+                            <i class="fas fa-wifi"></i>
+                            <h3>ISP Information</h3>
+                        </div>
+                        <div class="card-content">
+                            <p id="isp" class="primary-info">-</p>
+                            <p id="organization" class="secondary-info">-</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2025 Geolocation App - Powered by AWS Lambda & S3</p>
+        </footer>
+    </div>
+
+    <script>
+        // Configuration - Replace with your actual API Gateway URL
+        const API_BASE_URL = 'https://YOUR_API_GATEWAY_ID.execute-api.YOUR_REGION.amazonaws.com/dev';
+        const GEOLOCATION_ENDPOINT = `${API_BASE_URL}/geolocation`;
+
+        // DOM elements
+        const ipInput = document.getElementById('ipInput');
+        const lookupBtn = document.getElementById('lookupBtn');
+        const myLocationBtn = document.getElementById('myLocationBtn');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const errorMessage = document.getElementById('errorMessage');
+        const results = document.getElementById('results');
+
+        // Result elements
+        const displayIp = document.getElementById('displayIp');
+        const country = document.getElementById('country');
+        const countryCode = document.getElementById('countryCode');
+        const region = document.getElementById('region');
+        const regionCode = document.getElementById('regionCode');
+        const city = document.getElementById('city');
+        const zipCode = document.getElementById('zipCode');
+        const coordinates = document.getElementById('coordinates');
+        const timezone = document.getElementById('timezone');
+        const currentTime = document.getElementById('currentTime');
+        const isp = document.getElementById('isp');
+        const organization = document.getElementById('organization');
+        const mapBtn = document.getElementById('mapBtn');
+
+        let currentLocation = null;
+
+        // Event listeners
+        lookupBtn.addEventListener('click', handleLookup);
+        myLocationBtn.addEventListener('click', () => {
+            ipInput.value = '';
+            handleLookup();
+        });
+
+        ipInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleLookup();
+            }
+        });
+
+        mapBtn.addEventListener('click', openMap);
+
+        // Main lookup function
+        async function handleLookup() {
+            const ip = ipInput.value.trim();
+            
+            // Validate IP format if provided
+            if (ip && !isValidIP(ip)) {
+                showError('Please enter a valid IP address');
+                return;
+            }
+
+            showLoading();
+            hideError();
+            hideResults();
+
+            try {
+                const response = await fetch(GEOLOCATION_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ ip: ip || undefined })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    displayResults(data.ip, data.location);
+                } else {
+                    throw new Error(data.message || 'Failed to retrieve location');
+                }
+            } catch (err) {
+                console.error('Lookup error:', err);
+                showError(err.message || 'Failed to connect to the geolocation service');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Display results
+        function displayResults(ip, location) {
+            currentLocation = location;
+            
+            displayIp.textContent = ip;
+            country.textContent = location.country || 'Unknown';
+            countryCode.textContent = location.country_code ? `(${location.country_code})` : '';
+            region.textContent = location.region || 'Unknown';
+            regionCode.textContent = location.region_code ? `(${location.region_code})` : '';
+            city.textContent = location.city || 'Unknown';
+            zipCode.innerHTML = `ZIP: <span>${location.zip_code || 'Unknown'}</span>`;
+            
+            if (location.latitude && location.longitude) {
+                coordinates.textContent = `${location.latitude}, ${location.longitude}`;
+                mapBtn.style.display = 'inline-flex';
+            } else {
+                coordinates.textContent = 'Unknown';
+                mapBtn.style.display = 'none';
+            }
+            
+            timezone.textContent = location.timezone || 'Unknown';
+            updateCurrentTime(location.timezone);
+            
+            isp.textContent = location.isp || 'Unknown';
+            organization.textContent = location.organization || 'Unknown';
+
+            showResults();
+        }
+
+        // Update current time for timezone
+        function updateCurrentTime(tz) {
+            if (!tz || tz === 'Unknown') {
+                currentTime.textContent = 'Unknown';
+                return;
+            }
+
+            try {
+                const now = new Date();
+                const timeString = now.toLocaleTimeString('en-US', {
+                    timeZone: tz,
+                    hour12: true,
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                currentTime.textContent = `Current time: ${timeString}`;
+            } catch (e) {
+                currentTime.textContent = 'Time unavailable';
+            }
+        }
+
+        // Open location on map
+        function openMap() {
+            if (currentLocation && currentLocation.latitude && currentLocation.longitude) {
+                const url = `https://www.google.com/maps?q=${currentLocation.latitude},${currentLocation.longitude}`;
+                window.open(url, '_blank');
+            }
+        }
+
+        // Utility functions
+        function isValidIP(ip) {
+            const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+            const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
+            return ipv4Regex.test(ip) || ipv6Regex.test(ip);
+        }
+
+        function showLoading() {
+            loading.classList.remove('hidden');
+            lookupBtn.disabled = true;
+            myLocationBtn.disabled = true;
+        }
+
+        function hideLoading() {
+            loading.classList.add('hidden');
+            lookupBtn.disabled = false;
+            myLocationBtn.disabled = false;
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            error.classList.remove('hidden');
+        }
+
+        function hideError() {
+            error.classList.add('hidden');
+        }
+
+        function showResults() {
+            results.classList.remove('hidden');
+        }
+
+        function hideResults() {
+            results.classList.add('hidden');
+        }
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check if API URL needs to be updated
+            if (API_BASE_URL.includes('YOUR_API_GATEWAY_ID')) {
+                showError('Please update the API_BASE_URL in the JavaScript code with your actual API Gateway URL');
+            }
+        });
+    </script>
+</body>
+</html>
