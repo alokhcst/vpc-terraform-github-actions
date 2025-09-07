@@ -26,4 +26,7 @@ module "alb" {
 
 module "geolocation-app" {
   source = "./modules/geolocation-app"
+  project_name = var.project_name
+  environment = var.environment
+  aws_region=var.aws_region
 }
