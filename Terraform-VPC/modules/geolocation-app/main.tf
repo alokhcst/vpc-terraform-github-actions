@@ -1,6 +1,5 @@
 # main.tf
 
-
 variable "project_name" {
   description = "Name of the project"
   type        = string
@@ -12,6 +11,13 @@ variable "environment" {
   type        = string
   default     = "dev"
 }
+
+variable "aws_region" {
+  description = "aws_region"
+  type        = string
+  default     = "us-east-1"
+}
+
 
 # Random string for unique bucket naming
 resource "random_string" "bucket_suffix" {
@@ -105,8 +111,8 @@ resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
 # Archive Lambda function code
 data "archive_file" "lambda_zip" {
   type        = "zip"
-  source_file = "lambda_function.py"
-  output_path = "lambda_function.zip"
+  source_file = "${path.module}/lambda_function.py"
+  output_path = "${path.module}/lambda_function.zip"
 }
 
 # Lambda function
@@ -125,29 +131,22 @@ resource "aws_lambda_function" "geolocation_function" {
   }
 }
 
-# API Gateway REST API
+# API Gateway
 resource "aws_api_gateway_rest_api" "geolocation_api" {
-  name        = "${var.project_name}-api"
+  name        = "${var.project_name}-api-${random_string.bucket_suffix.result}"
   description = "API for geolocation service"
 
   endpoint_configuration {
     types = ["REGIONAL"]
   }
-
-  tags = {
-    Name        = "${var.project_name}-api"
-    Environment = var.environment
-  }
 }
 
-# API Gateway resource
 resource "aws_api_gateway_resource" "geolocation_resource" {
   rest_api_id = aws_api_gateway_rest_api.geolocation_api.id
   parent_id   = aws_api_gateway_rest_api.geolocation_api.root_resource_id
   path_part   = "geolocation"
 }
 
-# API Gateway method
 resource "aws_api_gateway_method" "geolocation_method" {
   rest_api_id   = aws_api_gateway_rest_api.geolocation_api.id
   resource_id   = aws_api_gateway_resource.geolocation_resource.id
@@ -155,7 +154,6 @@ resource "aws_api_gateway_method" "geolocation_method" {
   authorization = "NONE"
 }
 
-# API Gateway method for OPTIONS (CORS)
 resource "aws_api_gateway_method" "geolocation_options" {
   rest_api_id   = aws_api_gateway_rest_api.geolocation_api.id
   resource_id   = aws_api_gateway_resource.geolocation_resource.id
@@ -163,7 +161,6 @@ resource "aws_api_gateway_method" "geolocation_options" {
   authorization = "NONE"
 }
 
-# API Gateway integration
 resource "aws_api_gateway_integration" "lambda_integration" {
   rest_api_id             = aws_api_gateway_rest_api.geolocation_api.id
   resource_id             = aws_api_gateway_resource.geolocation_resource.id
@@ -173,7 +170,6 @@ resource "aws_api_gateway_integration" "lambda_integration" {
   uri                     = aws_lambda_function.geolocation_function.invoke_arn
 }
 
-# API Gateway integration for OPTIONS (CORS)
 resource "aws_api_gateway_integration" "lambda_options_integration" {
   rest_api_id = aws_api_gateway_rest_api.geolocation_api.id
   resource_id = aws_api_gateway_resource.geolocation_resource.id
@@ -185,63 +181,58 @@ resource "aws_api_gateway_integration" "lambda_options_integration" {
   }
 }
 
-# API Gateway method response
 resource "aws_api_gateway_method_response" "geolocation_response" {
   rest_api_id = aws_api_gateway_rest_api.geolocation_api.id
   resource_id = aws_api_gateway_resource.geolocation_resource.id
   http_method = aws_api_gateway_method.geolocation_method.http_method
   status_code = "200"
 
-  response_headers = {
-    "Access-Control-Allow-Origin" = true
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = true
   }
 }
 
-# API Gateway method response for OPTIONS
 resource "aws_api_gateway_method_response" "geolocation_options_response" {
   rest_api_id = aws_api_gateway_rest_api.geolocation_api.id
   resource_id = aws_api_gateway_resource.geolocation_resource.id
   http_method = aws_api_gateway_method.geolocation_options.http_method
   status_code = "200"
 
-  response_headers = {
-    "Access-Control-Allow-Headers" = true
-    "Access-Control-Allow-Methods" = true
-    "Access-Control-Allow-Origin"  = true
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+    "method.response.header.Access-Control-Allow-Origin"  = true
   }
 }
 
-# API Gateway integration response
 resource "aws_api_gateway_integration_response" "lambda_integration_response" {
   rest_api_id = aws_api_gateway_rest_api.geolocation_api.id
   resource_id = aws_api_gateway_resource.geolocation_resource.id
   http_method = aws_api_gateway_method.geolocation_method.http_method
   status_code = aws_api_gateway_method_response.geolocation_response.status_code
 
-  response_headers = {
-    "Access-Control-Allow-Origin" = "'*'"
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin" = "'*'"
   }
 
   depends_on = [aws_api_gateway_integration.lambda_integration]
 }
 
-# API Gateway integration response for OPTIONS
 resource "aws_api_gateway_integration_response" "lambda_options_integration_response" {
   rest_api_id = aws_api_gateway_rest_api.geolocation_api.id
   resource_id = aws_api_gateway_resource.geolocation_resource.id
   http_method = aws_api_gateway_method.geolocation_options.http_method
   status_code = aws_api_gateway_method_response.geolocation_options_response.status_code
 
-  response_headers = {
-    "Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-    "Access-Control-Allow-Methods" = "'GET,OPTIONS,POST,PUT'"
-    "Access-Control-Allow-Origin"  = "'*'"
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Headers" = "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,OPTIONS,POST,PUT'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
   }
 
   depends_on = [aws_api_gateway_integration.lambda_options_integration]
 }
 
-# API Gateway deployment
 resource "aws_api_gateway_deployment" "geolocation_deployment" {
   rest_api_id = aws_api_gateway_rest_api.geolocation_api.id
   stage_name  = var.environment
@@ -251,10 +242,13 @@ resource "aws_api_gateway_deployment" "geolocation_deployment" {
     aws_api_gateway_integration.lambda_integration,
     aws_api_gateway_method.geolocation_options,
     aws_api_gateway_integration.lambda_options_integration,
+    aws_api_gateway_method_response.geolocation_response,
+    aws_api_gateway_method_response.geolocation_options_response,
+    aws_api_gateway_integration_response.lambda_integration_response,
+    aws_api_gateway_integration_response.lambda_options_integration_response,
   ]
 }
 
-# Lambda permission for API Gateway
 resource "aws_lambda_permission" "api_gateway_lambda" {
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
@@ -263,29 +257,31 @@ resource "aws_lambda_permission" "api_gateway_lambda" {
   source_arn    = "${aws_api_gateway_rest_api.geolocation_api.execution_arn}/*/*"
 }
 
+
+
 # Upload website files
 resource "aws_s3_object" "index_html" {
   bucket       = aws_s3_bucket.website_bucket.id
   key          = "index.html"
-  source       = "index.html"
+  source       = "${path.module}/index.html"
   content_type = "text/html"
-  etag         = filemd5("index.html")
+  etag         = filemd5("${path.module}/index.html")
 }
 
 resource "aws_s3_object" "error_html" {
   bucket       = aws_s3_bucket.website_bucket.id
   key          = "error.html"
-  source       = "error.html"
+  source       = "${path.module}/error.html"
   content_type = "text/html"
-  etag         = filemd5("error.html")
+  etag         = filemd5("${path.module}/error.html")
 }
 
 resource "aws_s3_object" "styles_css" {
   bucket       = aws_s3_bucket.website_bucket.id
   key          = "styles.css"
-  source       = "styles.css"
+  source       = "${path.module}/styles.css"
   content_type = "text/css"
-  etag         = filemd5("styles.css")
+  etag         = filemd5("${path.module}/styles.css")
 }
 
 # Outputs
