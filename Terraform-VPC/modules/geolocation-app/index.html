@@ -117,18 +117,36 @@
                             <p id="organization" class="secondary-info">-</p>
                         </div>
                     </div>
+
+                    <div class="location-card">
+                        <div class="card-header">
+                            <i class="fas fa-wifi"></i>
+                            <h3>Current Geo Status</h3>
+                        </div>
+                        <div class="card-content">
+                            <p id="status" class="primary-info">-</p>
+                            <p id="locationInfo" class="secondary-info">-</p>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </main>
 
         <footer class="footer">
-            <p>&copy; 2025 Geolocation App - Powered by AWS Lambda & S3</p>
+            <p>&copy; 2025 Geolocation App - Powered by AG AWS Lambda & S3</p>
         </footer>
     </div>
 
     <script>
+
+        //let currentLocation = null;
+        let isTracking = false;
+
         // Configuration - Replace with your actual API Gateway URL
-        const API_BASE_URL = 'https://YOUR_API_GATEWAY_ID.execute-api.YOUR_REGION.amazonaws.com/dev';
+        //const API_BASE_URL = 'https://YOUR_API_GATEWAY_ID.execute-api.YOUR_REGION.amazonaws.com/dev';
+        const API_BASE_URL = 'https://eqtvqmpm7l.execute-api.us-east-1.amazonaws.com/prod';
+       
         const GEOLOCATION_ENDPOINT = `${API_BASE_URL}/geolocation`;
 
         // DOM elements
@@ -236,9 +254,94 @@
             isp.textContent = location.isp || 'Unknown';
             organization.textContent = location.organization || 'Unknown';
 
+
+
+
+
             showResults();
+
+            getCurrentLocation();
+
+
         }
 
+        function getCurrentLocation() {
+
+            if (!navigator.geolocation) {
+                showStatus('Geolocation is not supported by this browser.', 'error');
+                return;
+            }
+
+            const options = {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            };
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    currentLocation = {
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy,
+                        timestamp: new Date().toISOString()
+                        
+                    };
+
+                    displayLocation(currentLocation);
+                    showStatus('Location retrieved successfully!', 'success');
+                    
+                    
+                },
+                (error) => {
+                    let errorMessage = 'Unable to retrieve location: ';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage += 'Location access denied by user.';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage += 'Location information is unavailable.';
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage += 'Location request timed out.';
+                            break;
+                        default:
+                            errorMessage += 'An unknown error occurred.';
+                            break;
+                    }
+                    
+                    showStatus(errorMessage, 'error');
+                   
+                },
+                options
+            );
+
+        }
+
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+            
+            if (type === 'success' || type === 'error') {
+                setTimeout(() => {
+                    statusDiv.innerHTML = '';
+                }, 5000);
+            }
+        }
+
+        function displayLocation(location) {
+            const locationInfo = document.getElementById('locationInfo');
+            locationInfo.innerHTML = `
+                <div class="location-text">
+                    <strong>📍 Current Location:</strong><br>
+                    <strong>Lat:</strong> ${location.latitude.toFixed(6)}<br>
+                    <strong>Lng:</strong> ${location.longitude.toFixed(6)}<br>
+                    <strong>Accuracy:</strong> ±${location.accuracy.toFixed(0)}m<br>
+                    <strong>Time:</strong> ${new Date(location.timestamp).toLocaleString()}<br>
+                    
+                </div>
+            `;
+        }
         // Update current time for timezone
         function updateCurrentTime(tz) {
             if (!tz || tz === 'Unknown') {
