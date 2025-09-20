@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JWT Barcode Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/aws-sdk/2.1562.0/aws-sdk.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/amazon-cognito-identity-js/6.3.7/amazon-cognito-identity.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #4a5568;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .auth-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            border: 2px solid #e2e8f0;
+        }
+        
+        .barcode-section {
+            background: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            border: 2px solid #e2e8f0;
+            display: none;
+        }
+        
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 15px;
+            transition: border-color 0.3s ease;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+        
+        .success { 
+            background-color: #d4edda; 
+            color: #155724; 
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error { 
+            background-color: #f8d7da; 
+            color: #721c24; 
+            border: 1px solid #f5c6cb;
+        }
+        
+        .info { 
+            background-color: #d1ecf1; 
+            color: #0c5460; 
+            border: 1px solid #b8daff;
+        }
+        
+        .user-info {
+            background: #f0f4f8;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 5px solid #667eea;
+        }
+        
+        .barcode-display {
+            text-align: center;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .barcode-ascii {
+            font-family: 'Courier New', monospace;
+            font-size: 8px;
+            word-break: break-all;
+            background: white;
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        
+        .barcode-info {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            text-align: left;
+        }
+        
+        .hidden { display: none; }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(45deg, #718096, #4a5568);
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 JWT Barcode Generator</h1>
+        
+        <!-- Configuration Section -->
+        <div class="auth-section">
+            <h2>🔧 Configuration</h2>
+            <div class="form-group">
+                <label for="userPoolId">Cognito User Pool ID:</label>
+                <input type="text" id="userPoolId" placeholder="us-east-1_xxxxxxxxx">
+            </div>
+            <div class="form-group">
+                <label for="clientId">Cognito Client ID:</label>
+                <input type="text" id="clientId" placeholder="client_id_here">
+            </div>
+            <div class="form-group">
+                <label for="region">AWS Region:</label>
+                <input type="text" id="region" value="us-east-1">
+            </div>
+            <div class="form-group">
+                <label for="apiUrl">Barcode API URL:</label>
+                <input type="text" id="apiUrl" placeholder="https://api-id.execute-api.region.amazonaws.com/prod/generate-barcode">
+            </div>
+            <button onclick="saveConfig()">💾 Save Configuration</button>
+        </div>
+
+        <!-- Authentication Section -->
+        <div class="auth-section">
+            <h2>🔑 Authentication</h2>
+            <div id="authStatus" class="status info">Please configure and sign in to continue</div>
+            
+            <div id="loginForm">
+                <div class="form-group">
+                    <label for="username">Email:</label>
+                    <input type="email" id="username" placeholder="user@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" placeholder="Your password">
+                </div>
+                <button onclick="signIn()">🚀 Sign In</button>
+                <button onclick="signUp()" class="btn-secondary">📝 Sign Up</button>
+            </div>
+            
+            <div id="signupForm" class="hidden">
+                <div class="form-group">
+                    <label for="signupEmail">Email:</label>
+                    <input type="email" id="signupEmail" placeholder="user@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="signupPassword">Password:</label>
+                    <input type="password" id="signupPassword" placeholder="Minimum 8 characters">
+                </div>
+                <button onclick="performSignUp()">✨ Create Account</button>
+                <button onclick="showLogin()" class="btn-secondary">🔙 Back to Login</button>
+            </div>
+            
+            <div id="userInfo" class="user-info hidden">
+                <h3>👤 User Information</h3>
+                <div id="userDetails"></div>
+                <button onclick="signOut()" class="btn-secondary">🚪 Sign Out</button>
+            </div>
+        </div>
+
+        <!-- Barcode Generation Section -->
+        <div class="barcode-section" id="barcodeSection">
+            <h2>📊 JWT Barcode Generator</h2>
+            <div id="barcodeStatus" class="status info">Click generate to create a barcode from your JWT token</div>
+            
+            <button onclick="generateBarcode()" id="generateBtn">🎯 Generate Barcode</button>
+            
+            <div id="barcodeDisplay" class="barcode-display hidden">
+                <h3>Generated Barcode</h3>
+                <div id="barcodeContent"></div>
+                <div id="barcodeInfo" class="barcode-info"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let userPool;
+        let currentUser;
+        let cognitoUser;
+        let config = {};
+
+        // Load configuration from localStorage
+        function loadConfig() {
+            const savedConfig = localStorage.getItem('cognitoConfig');
+            if (savedConfig) {
+                config = JSON.parse(savedConfig);
+                document.getElementById('userPoolId').value = config.userPoolId || '';
+                document.getElementById('clientId').value = config.clientId || '';
+                document.getElementById('region').value = config.region || 'us-east-1';
+                document.getElementById('apiUrl').value = config.apiUrl || '';
+                
+                if (config.userPoolId && config.clientId) {
+                    initializeCognito();
+                }
+            }
+        }
+
+        // Save configuration
+        function saveConfig() {
+            // Read and trim values from the form
+            config = {
+                userPoolId: document.getElementById('userPoolId').value.trim(),
+                clientId: document.getElementById('clientId').value.trim(),
+                region: document.getElementById('region').value.trim() || 'us-east-1',
+                apiUrl: document.getElementById('apiUrl').value.trim()
+            };
+
+            // Basic validation
+            if (!config.userPoolId || !config.clientId) {
+                showStatus('authStatus', 'Please fill in User Pool ID and Client ID', 'error');
+                return;
+            }
+
+            // Persist config and initialize Cognito
+            try {
+                localStorage.setItem('cognitoConfig', JSON.stringify(config));
+                initializeCognito();
+                showStatus('authStatus', 'Configuration saved successfully!', 'success');
+            } catch (err) {
+                console.error('Failed to save config:', err);
+                showStatus('authStatus', 'Failed to save configuration: ' + err.message, 'error');
+            }
+        }
+
+        // Initialize Cognito
+        function initializeCognito() {
+            try {
+                if (!config.userPoolId || !config.clientId) {
+                    showStatus('authStatus', 'Please configure User Pool ID and Client ID first', 'error');
+                    return;
+                }
+
+                AWS.config.region = config.region || 'us-east-1';
+
+                const poolData = {
+                    UserPoolId: config.userPoolId,
+                    ClientId: config.clientId
+                };
+
+                userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
+
+                // Check if user is already logged in
+                currentUser = userPool.getCurrentUser();
+                if (currentUser != null) {
+                    currentUser.getSession((err, session) => {
+                        if (err) {
+                            console.warn('getSession error:', err);
+                            showStatus('authStatus', 'Session expired. Please sign in again.', 'error');
+                            return;
+                        }
+                        if (session && session.isValid()) {
+                            showUserInfo(currentUser, session);
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to initialize Cognito:', err);
+                showStatus('authStatus', 'Failed to initialize Cognito: ' + (err.message || err), 'error');
+            }
+        }
+
+        // Sign Up
+        function signUp() {
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('signupForm').classList.remove('hidden');
+        }
+
+        function showLogin() {
+            document.getElementById('signupForm').classList.add('hidden');
+            document.getElementById('loginForm').classList.remove('hidden');
+        }
+
+        function performSignUp() {
+            const email = document.getElementById('signupEmail').value;
+            const password = document.getElementById('signupPassword').value;
+
+            if (!email || !password) {
+                showStatus('authStatus', 'Please fill in all fields', 'error');
+                return;
+            }
+
+            if (!userPool) {
+                showStatus('authStatus', 'Please configure Cognito first', 'error');
+                return;
+            }
+
+            const attributeList = [
+                new AmazonCognitoIdentity.CognitoUserAttribute({
+                    Name: 'email',
+                    Value: email
+                })
+            ];
+
+            userPool.signUp(email, password, attributeList, null, (err, result) => {
+                if (err) {
+                    showStatus('authStatus', `Sign up failed: ${err.message}`, 'error');
+                    return;
+                }
+                
+                showStatus('authStatus', 'Sign up successful! Please check your email for verification code.', 'success');
+                showLogin();
+            });
+        }
+
+        // Sign In
+        function signIn() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) {
+                showStatus('authStatus', 'Please enter username and password', 'error');
+                return;
+            }
+
+            if (!userPool) {
+                showStatus('authStatus', 'Please configure Cognito first', 'error');
+                return;
+            }
+
+            const authenticationData = {
+                Username: username,
+                Password: password,
+            };
+
+            const authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails(authenticationData);
+
+            const userData = {
+                Username: username,
+                Pool: userPool,
+            };
+
+            cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
+
+            cognitoUser.authenticateUser(authenticationDetails, {
+                onSuccess: (session) => {
+                    showUserInfo(cognitoUser, session);
+                },
+                onFailure: (err) => {
+                    showStatus('authStatus', `Authentication failed: ${err.message}`, 'error');
+                },
+            });
+        }
+
+        // Show user information
+        function showUserInfo(user, session) {
+            const idToken = session.getIdToken().getJwtToken();
+            const accessToken = session.getAccessToken().getJwtToken();
+            
+            // Decode JWT to get user info
+            const payload = JSON.parse(atob(idToken.split('.')[1]));
+            
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('signupForm').classList.add('hidden');
+            document.getElementById('userInfo').classList.remove('hidden');
+            document.getElementById('barcodeSection').style.display = 'block';
+            
+            document.getElementById('userDetails').innerHTML = `
+                <p><strong>Email:</strong> ${payload.email || 'N/A'}</p>
+                <p><strong>Username:</strong> ${payload['cognito:username'] || 'N/A'}</p>
+                <p><strong>User ID:</strong> ${payload.sub}</p>
+                <p><strong>Token Issued:</strong> ${new Date(payload.iat * 1000).toLocaleString()}</p>
+                <p><strong>Token Expires:</strong> ${new Date(payload.exp * 1000).toLocaleString()}</p>
+            `;
+            
+            showStatus('authStatus', 'Successfully authenticated!', 'success');
+            
+            // Store tokens for barcode generation
+            window.currentTokens = {
+                idToken: idToken,
+                accessToken: accessToken
+            };
+        }
+
+        // Sign Out
+        function signOut() {
+            if (cognitoUser) {
+                cognitoUser.signOut();
+            }
+            
+            document.getElementById('userInfo').classList.add('hidden');
+            document.getElementById('loginForm').classList.remove('hidden');
+            document.getElementById('barcodeSection').style.display = 'none';
+            document.getElementById('barcodeDisplay').classList.add('hidden');
+            
+            window.currentTokens = null;
+            
+            showStatus('authStatus', 'Signed out successfully', 'info');
+        }
+
+        // Generate Barcode
+        async function generateBarcode() {
+            if (!window.currentTokens) {
+                showStatus('barcodeStatus', 'Please sign in first', 'error');
+                return;
+            }
+
+            if (!config.apiUrl) {
+                showStatus('barcodeStatus', 'Please configure the API URL first', 'error');
+                return;
+            }
+
+            const generateBtn = document.getElementById('generateBtn');
+            generateBtn.disabled = true;
+            generateBtn.textContent = '⏳ Generating...';
+
+            try {
+                const response = await fetch(config.apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        jwt_token: window.currentTokens.accessToken
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    displayBarcode(result);
+                    showStatus('barcodeStatus', 'Barcode generated successfully!', 'success');
+                } else {
+                    showStatus('barcodeStatus', `Error: ${result.error || 'Failed to generate barcode'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus('barcodeStatus', `Network error: ${error.message}`, 'error');
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.textContent = '🎯 Generate Barcode';
+            }
+        }
+
+        // Display barcode results
+        function displayBarcode(result) {
+            const display = document.getElementById('barcodeDisplay');
+            const content = document.getElementById('barcodeContent');
+            const info = document.getElementById('barcodeInfo');
+
+            content.innerHTML = `
+                <div class="barcode-ascii">${result.barcode_ascii}</div>
+                <div style="margin: 20px 0;">${result.barcode_svg}</div>
+                <p><strong>Barcode Content:</strong> ${result.barcode_content}</p>
+            `;
+
+            info.innerHTML = `
+                <h4>📋 Barcode Information</h4>
+                <p><strong>User ID:</strong> ${result.barcode_data.user_id}</p>
+                <p><strong>Username:</strong> ${result.barcode_data.username}</p>
+                <p><strong>Email:</strong> ${result.barcode_data.email}</p>
+                <p><strong>Session ID:</strong> ${result.barcode_data.session_id}</p>
+                <p><strong>Token Issued:</strong> ${new Date(result.barcode_data.iat * 1000).toLocaleString()}</p>
+                <p><strong>Token Expires:</strong> ${new Date(result.barcode_data.exp * 1000).toLocaleString()}</p>
+                <p><strong>Generated At:</strong> ${new Date(result.generated_at).toLocaleString()}</p>
+            `;
+
+            display.classList.remove('hidden');
+        }
+
+        // Utility function to show status messages
+        function showStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.className = `status ${type}`;
+            element.textContent = message;
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            loadConfig();
+        });
+    </script>
+</body>
+</html>
